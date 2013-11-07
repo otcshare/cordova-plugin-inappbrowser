@@ -96,60 +96,64 @@ public class InAppBrowser extends CordovaPlugin {
      * @param callbackId    The callback id used when calling back into JavaScript.
      * @return              A PluginResult object with a status and message.
      */
-    public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
+    public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
         try {
             if (action.equals("open")) {
                 this.callbackContext = callbackContext;
-                String url = args.getString(0);
+                final String url = args.getString(0);
                 String target = args.optString(1);
                 if (target == null || target.equals("") || target.equals(NULL)) {
                     target = SELF;
                 }
-                HashMap<String, Boolean> features = parseFeature(args.optString(2));
+                final String finalTarget = target;
+                final HashMap<String, Boolean> features = parseFeature(args.optString(2));
                 
                 Log.d(LOG_TAG, "target = " + target);
-
-                url = updateUrl(url);
-                String result = "";
-
-                // SELF
-                if (SELF.equals(target)) {
-                    Log.d(LOG_TAG, "in self");
-                    // load in webview
-                    if (url.startsWith("file://") || url.startsWith("javascript:") 
-                            || Config.isUrlWhiteListed(url)) {
-                        this.webView.loadUrl(url);
-                    }
-                    //Load the dialer
-                    else if (url.startsWith(WebView.SCHEME_TEL))
-                    {
-                        try {
-                            Intent intent = new Intent(Intent.ACTION_DIAL);
-                            intent.setData(Uri.parse(url));
-                            this.cordova.getActivity().startActivity(intent);
-                        } catch (android.content.ActivityNotFoundException e) {
-                            LOG.e(LOG_TAG, "Error dialing " + url + ": " + e.toString());
+                this.cordova.getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        String targetUrl = updateUrl(url);
+                        String result = "";
+                        // SELF
+                        if (SELF.equals(finalTarget)) {
+                            Log.d(LOG_TAG, "in self");
+                            // load in webview
+                            if (targetUrl.startsWith("file://") || targetUrl.startsWith("javascript:") 
+                                    || Config.isUrlWhiteListed(targetUrl)) {
+                                webView.loadUrl(targetUrl);
+                            }
+                            //Load the dialer
+                            else if (targetUrl.startsWith(WebView.SCHEME_TEL))
+                            {
+                                try {
+                                    Intent intent = new Intent(Intent.ACTION_DIAL);
+                                    intent.setData(Uri.parse(targetUrl));
+                                    cordova.getActivity().startActivity(intent);
+                                } catch (android.content.ActivityNotFoundException e) {
+                                    LOG.e(LOG_TAG, "Error dialing " + targetUrl + ": " + e.toString());
+                                }
+                            }
+                            // load in InAppBrowser
+                            else {
+                                result = showWebPage(targetUrl, features);
+                            }
                         }
-                    }
-                    // load in InAppBrowser
-                    else {
-                        result = this.showWebPage(url, features);
-                    }
-                }
-                // SYSTEM
-                else if (SYSTEM.equals(target)) {
-                    Log.d(LOG_TAG, "in system");
-                    result = this.openExternal(url);
-                }
-                // BLANK - or anything else
-                else {
-                    Log.d(LOG_TAG, "in blank");
-                    result = this.showWebPage(url, features);
-                }
+                        // SYSTEM
+                        else if (SYSTEM.equals(finalTarget)) {
+                            Log.d(LOG_TAG, "in system");
+                            result = openExternal(targetUrl);
+                        }
+                        // BLANK - or anything else
+                        else {
+                            Log.d(LOG_TAG, "in blank");
+                            result = showWebPage(targetUrl, features);
+                        }
 
-                PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, result);
-                pluginResult.setKeepCallback(true);
-                this.callbackContext.sendPluginResult(pluginResult);
+                        PluginResult pluginResult = new PluginResult(PluginResult.Status.OK, result);
+                        pluginResult.setKeepCallback(true);
+                        callbackContext.sendPluginResult(pluginResult);
+                    }
+                });
             }
             else if (action.equals("close")) {
                 closeDialog();
